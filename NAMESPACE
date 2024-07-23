@@ -1,0 +1,3 @@
+exportPattern("^[[:alpha:]]+")
+import( INLA, spatstat, s2, gridExtra, leaflet,leaflet.minicharts, parzer, fmesher, sf,spdep,stats,grDevices,methods)
+#It is not my intention to export all the functions, but the cuurent version of Rstudio cannot build a package with an internal function which is not exported and documented.
