@@ -1,0 +1,175 @@
+---
+title: "alleleAtlas tutorial"
+author: "Satoshi Aoki"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{alleleAtlas tutorial}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## 1 Aim of this package, alleleAtlas
+The alleleAtlas is an R package for spatial interpolation of allele frequencies. This package uses Bayesian inference by R-INLA and can infer multiple allele frequencies at a time.
+
+## 2 Installation
+This package is not on CRAN because the depending package, R-INLA, is not on CRAN. So, you first have to get the method to install packages from GitHub. One way to do it is using devtools package. The following command installs devtools and alleleAtlas.
+
+```{r, eval=FALSE}
+install.packages("INLA",repos=c(getOption("repos"),INLA="https://inla.r-inla-download.org/R/stable"), dep=TRUE)
+install.packages("devtools")
+library(devtools)
+devtools::install_github("alleleAtlas/Sa-to-shi-A-o-ki", upgrade="never")
+```
+
+## 3 How to use
+First, please load the package by the following command:
+
+``` {r, results="hide", warning=FALSE, message=FALSE}
+library(alleleAtlas)
+```
+``` {r, results="hide", warning=FALSE, message=FALSE,echo=FALSE}
+#import depending libraries
+library(INLA)
+library(spatstat)
+library(s2)
+library(gridExtra)
+library(leaflet)
+library(sf)
+library(leaflet.minicharts)
+library(parzer)
+library(spdep)
+library(fmesher)
+```
+
+### 3.1 Import and prepare csv file
+We need data of the sampling locations and alleles for the analysis. The next command imports example data included in this package.
+```{r}
+Edata<-readLines(system.file("extdata","Faguslocationdata.csv",package="alleleAtlas"),encoding="UTF-8")
+```
+The loaded data look like this.
+```{r}
+Edata
+```
+The data show that the fist and second columns of the csv file contain longitude and latitude, respectively. The third and subsequent columns show sequences of the alleles sampled in the location of the row. Different samples in a location occupies different columns.
+
+When you use your own csv file, please use the following command:
+```{r, eval=FALSE}
+Edata<-readLines("yourDataPath.csv",encoding="UTF-8")
+```
+If you are not interested in calculating genetic diversity measures (like nucleotide diversity) later, you do not have to type sequences in your csv file; different label for each allele (e.g., A, B, C, D and E for 5 types of alleles) can work as the sequence.
+
+The loaded data are, then, interpreted by processInput function as follows:
+```{r}
+temp<-processInput(Edata)
+Edata.loc<-temp[[1]]
+EalleleCount<-temp[[2]]
+EalleleSequence<-temp[[3]]
+Ealternative<-temp[[4]]
+```
+
+### 3.2 Test discrete inference
+The result of interpolation depends on the resolution of meshes. Therefore, before you prepare and import your own shape file of geographical area, you can roughly check the relationship between the mesh resolution and inference result.
+
+Let's make 10x10 meshes by the following commands:
+```{r}
+autoWindow<-TRUE
+northPole<-FALSE
+southPole<-FALSE
+loop<-FALSE
+lat<-10
+lon<-10
+ESPDF<-makeSpatialPolygons(autoWindow,lat,lon,data.loc=Edata.loc,northPole=northPole,southPole=southPole,loop=loop,forceMaxEast=TRUE)
+```
+Here, the autoWindow argument decides whether the function automatically makes the area of meshes. The arguments of northPole and southPole are whether the top and bottom meshes neighbors or not. Please make them TRUE when your study area includes the northern and/or southern pole. The argument of loop means whether the leftmost and rightmost meshes neighbors or not. The arguments of lat and lon are the number of latitudinal and longitudinal meshes. The resultant meshes and sampling locations looks like this:
+```{r, fig.show='hold'}
+plot(ESPDF)
+points(Edata.loc,pch=21,bg="orange",cex=0.9)
+```
+
+Next, we must make a neighbor matrix of this meshes by the following code:
+```{r, eval=FALSE}
+makeNeighbor("filePath", lat, lon, northPole, southPole, loop)
+```
+The argument of "filePath" requires a path of the neighbor matrix file. Since vignette cannot export a file, we here use pre-made data instead:
+```{r}
+neighbor<-system.file("extdata","neighbor.txt",package="alleleAtlas")
+```
+Then, let's check the result of interpolation using this mesh.
+```{r, fig.show='hold'}
+Eid.samples<-getIDsamples(Edata.loc,ESPDF,TRUE)
+EdataMatrix<-makeDataMatrix(Edata,Ealternative,EalleleSequence,Eid.samples)
+randomModel<-"besagproper"
+Emodels<-calcCARModel(EalleleSequence,randomModel,neighbor,EdataMatrix)
+EfreqSep<-getFreq(Ealternative,Emodels,randomModel)
+plotAllFreq(ESPDF,EfreqSep,size=24)
+```
+
+You can compare the above result with the sample frequencies by the following command:
+```{r, fig.show='hold'}
+Edata.prob<-makeSampleFreq(EdataMatrix,ESPDF)
+plotAllFreq(ESPDF,Edata.prob,size=24)
+```
+
+Next, use of user-made meshes will be explained. A way to make an shape file of meshes is explained the original article. Please load a shape file by the following code:
+```{r, eval=FALSE}
+shapesf<-read_sf("filePath")
+```
+Instead of this, an example data is used here:
+```{r}
+shapesf<-read_sf(system.file("extdata","fagusLGMmesh.shp",package="alleleAtlas"))
+```
+The later process is not so different from the previous analysis:
+```{r}
+ESPDF<-sf2SPDF(shapesf)
+nb<-poly2nb(shapesf,queen=TRUE,snap=1,useC=T)
+Egraph<-nb2mat(nb,style="B")
+Eid.samples<-getIDsamples(Edata.loc,ESPDF,TRUE)
+EdataMatrix<-makeDataMatrix(Edata,Ealternative,EalleleSequence,Eid.samples)
+Emodels<-calcCARModel(EalleleSequence,randomModel,Egraph,EdataMatrix)
+EfreqSep<-getFreq(Ealternative,Emodels,randomModel)
+plotAllFreq(ESPDF,EfreqSep,size=24)
+```
+
+Because the result changes depending on the meshes and used models, please try some combinations of them. Typically, the following random model can be used: "besag", "besag2", "besagproper" and "besagproper2".
+
+### 3.3 Test continuous inference
+
+In continuous inference, the package uses a user-made shape file which defines the study area. This file is not divided into meshes like the previous file. You can prepare this file by dissolving the meshes into a single polygon.
+You can load your own shape file by the following code:
+```{r, eval=FALSE}
+shapesf<-read_sf("filePath")
+```
+Instead of this, an example data is used here:
+```{r}
+shapesf<-read_sf(system.file("extdata","fagusLGMmesh_dissolved.shp",package="alleleAtlas"))
+```
+Then, triangular meshes are created on the area of the shape file. This meshes decides the result and calculation time. Therefore, please try several combinations of max.edge and cutoff.
+```{r, fig.show='hold'}
+bound<-inla.sp2segment(shapesf)
+mesh<-fm_mesh_2d(loc=Edata.loc,boundary=bound,max.edge=c(1),cutoff=0.5)
+plot(mesh)
+points(Edata.loc,col="red")
+```
+
+Finally, calculate the interpolation using the triangular meshes.
+```{r}
+proj<-inla.mesh.projector(mesh,dims=c(20,20))
+
+Emodels<-calcSPDEModel(EalleleSequence,Ealternative,EdataMatrix,mesh=mesh,data.loc=Edata.loc)
+prob<-getFreq(Ealternative,Emodels)
+plotAllFreq(mesh,prob,dimx=15,dimy=15,size=24)
+```
+## 4 The other functions
+This package also has functions to calculate nucleotide diversity and expected heterozygosity from the interpolated result and plot a frequency or data on a map. The next codes plot the frequency of the first allele type and expected heterozygosity from the interpolation result. These can be plotted for the discrete results by changing mesh to ESPDF in this example codes.
+```{r}
+plotDatum(mesh,prob[,1],"allele1")
+plotDatum(mesh,calcExpectedHeterozygosity(prob),"exheterozygosity")
+```
