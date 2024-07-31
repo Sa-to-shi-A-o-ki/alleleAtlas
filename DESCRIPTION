@@ -1,11 +1,11 @@
 Package: alleleAtlas
 Type: Package
 Title: Help spatial interpolation of allele frequency using INLA
-Version: 0.1.0.0
+Version: 0.1.0.1
 Authors@R: c(person(given="Satoshi",family="Aoki",role=c("aut","cph","cre"),email="aokis1ll1@gmail.com"))
-Date: 2024-11-02
+Date: 2024-07-31
 Description: This package helps conducting spatial interpolation of allele frequencies using INLA.
-License: MIT + file LICENSE
+License: GPL-2
 Encoding: UTF-8
 LazyData: true
 URL: https://github.com/Sa-to-shi-A-o-ki/alleleAtlas
