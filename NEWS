@@ -1,0 +1,9 @@
+ver.0.2.0.0:
+Fixed the function to calculate the allele frequency.
+Added a function to calculate credible intervals.
+
+ver.0.1.0.1:
+Fixed the lisence to adopt the copyleft of the depending packages.
+
+ver.0.1.0.0:
+First release.

@@ -675,55 +675,60 @@ calcCARModel<-function(alleleSequence,randomModel,adjacency,dataMatrix,prior="je
   return(models)
 }
 
-#function to depict results
-getFreq<-function(alternative,models,randomModel=NULL)
+#obtain quantiles of allele frequency
+getQt<-function(models,n=121,q=c(0.5,0.025,0.975))
 {
-  prob<-list(alternative)
-  for(i in 1:alternative)
+  alleleCount<-length(models)
+  resampleData<-vector("list",alleleCount)
+  for(i in 1:alleleCount)
   {
-    prob[[i]]<-models[[i]]$summary.random[[1]][5][[1]]
+    resampleData[[i]]<-inla.posterior.sample(n,models[[i]])
   }
-  meshCount<-length(prob[[1]])
-  if(is.null(randomModel)==TRUE)
+  alleleSampleList<-vector("list",alleleCount)
+  #quantiles
+  quantileList<-vector("list",alleleCount)
+  index<-grep("allele",attr(resampleData[[1]][[1]][[2]][,1],"names"))
+  meshCount<-length(index)
+  #denominator to divide raw values by the sum of allele data
+  denominator<-matrix(0,nrow=meshCount,ncol=n)
+  #rest of rounded-off
+  rest<-matrix(0,nrow=meshCount,ncol=1)
+  for(k in 1:alleleCount)
   {
-    prob.matrix<-matrix(0,nrow=meshCount,ncol=alternative)
-  }
-  else if((randomModel == "bym") || (randomModel == "bym2"))
-  {
-    prob.matrix<-matrix(0,nrow=meshCount,ncol=alternative)
-  }
-  else
-  {
-    prob.matrix<-matrix(0,nrow=meshCount,ncol=alternative)
-  }
-
-  for(i in 1:alternative)
-  {
-    for(j in 1:meshCount)
+    index<-grep("allele",attr(resampleData[[k]][[1]][[2]][,1],"names"))
+    alleleSampleList[[k]]<-matrix(0,nrow=meshCount,ncol=n)
+    for(i in 1:n)
     {
-      prob.matrix[j,i]<-exp(prob[[i]][j])
+      alleleSampleList[[k]][,i]<-exp(resampleData[[k]][[i]][[2]][index])
+      #calculate sum considering loss of trailing digits
+      temp<-denominator[,i]+alleleSampleList[[k]][,i]+rest[,1]
+      rest[,1]<-(alleleSampleList[[k]][,i]+rest[,1])-(temp-denominator[,i])
+      denominator[,i]<-temp
+      #naive calculation:
+      #denominator[,i]<-denominator[,i]+alleleSampleList[[k]][,i]
     }
   }
-  if(is.null(randomModel)==TRUE)
+  for(k in 1:alleleCount)
   {
-    prob.result<-matrix(0,nrow=meshCount,ncol=alternative)
-  }
-  else if((randomModel=="bym")||(randomModel=="bym2"))
-  {
-    prob.result<-matrix(0,nrow=meshCount,ncol=alternative)
-  }
-  else
-  {
-    prob.result<-matrix(0,nrow=meshCount,ncol=alternative)
-  }
-  for(i in 1:alternative)
-  {
+    #divide raw values by the sum of allele data
+    alleleSampleList[[k]]<-alleleSampleList[[k]]/denominator
+    quantileList[[k]]<-matrix(0,nrow=meshCount,ncol=length(q))
     for(j in 1:meshCount)
     {
-      prob.result[j,i]<-prob.matrix[j,i]/sum(prob.matrix[j,])
+      quantileList[[k]][j,]<-quantile(alleleSampleList[[k]][j,],q)
     }
   }
-  return(prob.result)
+  #convert the data format
+  result<-vector("list",length(q))
+  for(i in 1:length(q))
+  {
+    result[[i]]<-matrix(0,nrow=meshCount,ncol=alleleCount)
+    for(k in 1:alleleCount)
+    {
+      result[[i]][,k]<-quantileList[[k]][,i]
+    }
+  }
+  return(result)
 }
 
 plotDatum<-function(polygon,data,title,markerLoc=NULL,tile="Esri.WorldGrayCanvas",col1="red",col2="yellow")
@@ -1012,7 +1017,7 @@ calcSPDEModel<-function(alleleSequence,alternative,dataMatrix,prior="flat",verbo
     varname<-paste0("allele",i)
     formulette[[i]]<-paste("f(",varname,",model=spde,group=s_index$spatial.field.group,hyper=list(theta=list(prior=prior,param=numeric())))")
     formula<-as.formula(paste("Y~-1+", paste(formulette[[i]],collapse="+")))
-    models[[i]]<-inla(formula,data=inla.stack.data(stack,spde=spde),family="poisson",control.predictor=list(A=inla.stack.A(stack),compute=TRUE),verbose=verbose)
+    models[[i]]<-inla(formula,data=inla.stack.data(stack,spde=spde),family="poisson",control.compute=list(config=TRUE,cpo=TRUE),control.predictor=list(A=inla.stack.A(stack),compute=TRUE),verbose=verbose)
   }
   return(models)
 }

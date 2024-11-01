@@ -29,6 +29,9 @@ library(devtools)
 devtools::install_github("alleleAtlas/Sa-to-shi-A-o-ki", upgrade="never")
 ```
 
+The other depending packages are also necessary. The depending packages are:
+spatstat, s2, gridExtra, leaflet,leaflet.minicharts, parzer, fmesher, sf,spdep
+They are all on CRAN. Therefore, they can be installed using install.packages function.
 ## 3 How to use
 First, please load the package by the following command:
 
@@ -108,8 +111,8 @@ Eid.samples<-getIDsamples(Edata.loc,ESPDF,TRUE)
 EdataMatrix<-makeDataMatrix(Edata,Ealternative,EalleleSequence,Eid.samples)
 randomModel<-"besagproper"
 Emodels<-calcCARModel(EalleleSequence,randomModel,neighbor,EdataMatrix)
-EfreqSep<-getFreq(Ealternative,Emodels,randomModel)
-plotAllFreq(ESPDF,EfreqSep,size=24)
+EfreqCAR<-getQt(Emodels)
+plotAllFreq(ESPDF,EfreqCAR[[1]],size=24)
 ```
 
 You can compare the above result with the sample frequencies by the following command:
@@ -134,8 +137,8 @@ Egraph<-nb2mat(nb,style="B")
 Eid.samples<-getIDsamples(Edata.loc,ESPDF,TRUE)
 EdataMatrix<-makeDataMatrix(Edata,Ealternative,EalleleSequence,Eid.samples)
 Emodels<-calcCARModel(EalleleSequence,randomModel,Egraph,EdataMatrix)
-EfreqSep<-getFreq(Ealternative,Emodels,randomModel)
-plotAllFreq(ESPDF,EfreqSep,size=24)
+EfreqCAR<-getQt(Emodels)
+plotAllFreq(ESPDF,EfreqCAR[[1]],size=24)
 ```
 
 Because the result changes depending on the meshes and used models, please try some combinations of them. Typically, the following random model can be used: "besag", "besag2", "besagproper" and "besagproper2".
@@ -164,12 +167,14 @@ Finally, calculate the interpolation using the triangular meshes.
 proj<-inla.mesh.projector(mesh,dims=c(20,20))
 
 Emodels<-calcSPDEModel(EalleleSequence,Ealternative,EdataMatrix,mesh=mesh,data.loc=Edata.loc)
-prob<-getFreq(Ealternative,Emodels)
-plotAllFreq(mesh,prob,dimx=15,dimy=15,size=24)
+prob<-getQt(Emodels)
+plotAllFreq(mesh,prob[[1]],dimx=15,dimy=15,size=24)
 ```
 ## 4 The other functions
-This package also has functions to calculate nucleotide diversity and expected heterozygosity from the interpolated result and plot a frequency or data on a map. The next codes plot the frequency of the first allele type and expected heterozygosity from the interpolation result. These can be plotted for the discrete results by changing mesh to ESPDF in this example codes.
+This package also has functions to calculate credible intervals, nucleotide diversity and expected heterozygosity from the interpolated result and plot data on a map. The next codes plot the frequency of the first allele type, its 95% credible interval and expected heterozygosity from the interpolation result. These can be plotted for the discrete results by changing mesh to ESPDF in this example codes.
 ```{r}
-plotDatum(mesh,prob[,1],"allele1")
-plotDatum(mesh,calcExpectedHeterozygosity(prob),"exheterozygosity")
+plotDatum(ESPDF,EfreqCAR[[1]][,1],"allele1")
+plotDatum(ESPDF,EfreqCAR[[2]][,1],"allele1LowerCI")
+plotDatum(ESPDF,EfreqCAR[[3]][,1],"allele1HigherCI")
+plotDatum(ESPDF,calcExpectedHeterozygosity(EfreqCAR[[1]]),"exheterozygosity")
 ```

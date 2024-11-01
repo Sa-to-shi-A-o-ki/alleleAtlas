@@ -1,15 +1,15 @@
 Package: alleleAtlas
 Type: Package
 Title: Help spatial interpolation of allele frequency using INLA
-Version: 0.1.0.1
+Version: 0.2.0.0
 Authors@R: c(person(given="Satoshi",family="Aoki",role=c("aut","cph","cre"),email="aokis1ll1@gmail.com"))
-Date: 2024-07-31
+Date: 2024-11-01
 Description: This package helps conducting spatial interpolation of allele frequencies using INLA.
 License: GPL-2
 Encoding: UTF-8
 LazyData: true
 URL: https://github.com/Sa-to-shi-A-o-ki/alleleAtlas
 BugReports: https://github.com/Sa-to-shi-A-o-ki/alleleAtlas
-Imports: INLA, spatstat, s2, gridExtra, leaflet,leaflet.minicharts, parzer, fmesher, sf,spdep,stats,grDevices,methods
+Imports: INLA, spatstat, s2, gridExtra, leaflet,leaflet.minicharts, parzer, fmesher, sf,spdep
 Suggests: knitr, rmarkdown
 VignetteBuilder: knitr
