@@ -1,0 +1,1 @@
+For usage, please dowonload vignettes/vignette.html on this repository and read it offline.
