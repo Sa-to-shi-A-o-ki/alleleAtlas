@@ -1,3 +1,7 @@
+ver.1.0.0
+Just increased the major version to match some journal requirement.
+The code is not changed.
+
 ver.0.2.0.0:
 Fixed the function to calculate the allele frequency.
 Added a function to calculate credible intervals.
