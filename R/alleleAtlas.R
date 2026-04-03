@@ -1251,13 +1251,19 @@ validateFrequency<-function(locIndex,id.samples,outData,sampleData,method="both"
   meshID<-id.samples[locIndex]
   estimated<-outData[meshID,]
   sample<-sampleData[meshID,]
-  if(method=="logloss")
+  if(method=="both")
   {
-    result<-calcLogLoss(estimated,sample)
+    result<-vector("list",2)
+    result[[1]]<-calcLogLoss(estimated,sample)
+    result[[2]]<-calcHTAE(estimated,sample)
   }
   else if(method=="HTAE")
   {
     result<-calcHTAE(estimated,sample)
+  }
+  else if(method=="logloss")
+  {
+    result<-calcLogLoss(estimated,sample)
   }
   else
   {
