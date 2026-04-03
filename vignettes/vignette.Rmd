@@ -43,6 +43,7 @@ library(alleleAtlas)
 library(INLA)
 library(spatstat)
 library(s2)
+library(sp)
 library(gridExtra)
 library(leaflet)
 library(sf)
@@ -50,6 +51,7 @@ library(leaflet.minicharts)
 library(parzer)
 library(spdep)
 library(fmesher)
+library(sn)
 ```
 
 ### 3.1 Import and prepare csv file
@@ -108,10 +110,10 @@ neighbor<-system.file("extdata","neighbor.txt",package="alleleAtlas")
 Then, let's check the result of interpolation using this mesh.
 ```{r, fig.show='hold'}
 Eid.samples<-getIDsamples(Edata.loc,ESPDF,TRUE)
-EdataMatrix<-makeDataMatrix(Edata,Ealternative,EalleleSequence,Eid.samples)
+EdataMatrix<-makeDataMatrix(Edata,Ealternative,EalleleSequence,Eid.samples,lat*lon)
 randomModel<-"besagproper"
-Emodels<-calcCARModel(EalleleSequence,randomModel,neighbor,EdataMatrix)
-EfreqCAR<-getQt(Emodels)
+Emodels<-calcCAR(EalleleSequence,randomModel,neighbor,EdataMatrix)
+EfreqCAR<-getMeanQt(Emodels,EdataMatrix)
 plotAllFreq(ESPDF,EfreqCAR[[1]],size=24)
 ```
 
@@ -135,10 +137,10 @@ ESPDF<-sf2SPDF(shapesf)
 nb<-poly2nb(shapesf,queen=TRUE,snap=1,useC=T)
 Egraph<-nb2mat(nb,style="B")
 Eid.samples<-getIDsamples(Edata.loc,ESPDF,TRUE)
-EdataMatrix<-makeDataMatrix(Edata,Ealternative,EalleleSequence,Eid.samples)
-Emodels<-calcCARModel(EalleleSequence,randomModel,Egraph,EdataMatrix)
-EfreqCAR<-getQt(Emodels)
-plotAllFreq(ESPDF,EfreqCAR[[1]],size=24)
+EdataMatrix<-makeDataMatrix(Edata,Ealternative,EalleleSequence,Eid.samples,length(ESPDF))
+Emodels<-calcCAR(EalleleSequence,randomModel,Egraph,EdataMatrix)
+EfreqCAR<-getMeanQt(Emodels,EdataMatrix)
+plotAllFreq(ESPDF,EfreqCAR[[2]],size=24)
 ```
 
 Because the result changes depending on the meshes and used models, please try some combinations of them. Typically, the following random model can be used: "besag", "besag2", "besagproper" and "besagproper2".
@@ -165,13 +167,13 @@ points(Edata.loc,col="red")
 Finally, calculate the interpolation using the triangular meshes.
 ```{r}
 proj<-inla.mesh.projector(mesh,dims=c(20,20))
-
-Emodels<-calcSPDEModel(EalleleSequence,Ealternative,EdataMatrix,mesh=mesh,data.loc=Edata.loc)
-prob<-getQt(Emodels)
-plotAllFreq(mesh,prob[[1]],dimx=15,dimy=15,size=24)
+estimate.loc<-polygons2centerpoints(ESPDF)
+Emodels<-calcSPDE(Ealternative,EdataMatrix,mesh=mesh,data.loc=estimate.loc)
+prob<-getMeanQtSPDE(Emodels,mesh,estimate.loc)
+plotAllFreq(ESPDF,prob[[2]],dimx=15,dimy=15,size=24)
 ```
 ## 4 The other functions
-This package also has functions to calculate credible intervals, nucleotide diversity and expected heterozygosity from the interpolated result and plot data on a map. The next codes plot the frequency of the first allele type, its 95% credible interval and expected heterozygosity from the interpolation result. These can be plotted for the discrete results by changing mesh to ESPDF in this example codes.
+This package also has functions to conduct cross validation, calculate credible intervals, nucleotide diversity and expected heterozygosity from the interpolated result and plot data on a map. The next codes plot the frequency of the first allele type, its 95% credible interval and expected heterozygosity from the interpolation result. These can be plotted for the discrete results by changing mesh to ESPDF in this example codes.
 ```{r}
 plotDatum(ESPDF,EfreqCAR[[1]][,1],"allele1")
 plotDatum(ESPDF,EfreqCAR[[2]][,1],"allele1LowerCI")

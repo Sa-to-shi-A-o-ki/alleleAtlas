@@ -16,4 +16,5 @@ A list of the size four.
   The second element is a numeric vector showing the number of each allele type in the sample.
   The third element is a character vector of the allele sequences.
   The fourth element is a numeric vector of size 1. This shows the number of the allele types in the sample.
+  The fifth element is a list of a numeric vector. The numeric shows an ID of location-specific allele or alleles observed only in the location of list index.
 }

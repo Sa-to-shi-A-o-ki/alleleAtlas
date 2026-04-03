@@ -3,6 +3,10 @@
 \alias{makeMinWindow}
 \alias{interpreteBase}
 \alias{seq.dist}
+\alias{calcHTAE}
+\alias{calcLogLoss}
+\alias{leaveOneOut}
+\alias{validateFrequency}
 \title{Internal alleleAtlas Functions}
 \description{
  Internal alleleAtlas functions
