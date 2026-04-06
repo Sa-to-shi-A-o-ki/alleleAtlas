@@ -7,6 +7,7 @@
 \alias{calcLogLoss}
 \alias{leaveOneOut}
 \alias{validateFrequency}
+\alias{resampleFreq}
 \title{Internal alleleAtlas Functions}
 \description{
  Internal alleleAtlas functions
