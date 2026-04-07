@@ -2,7 +2,7 @@
 \alias{cvSPDE}
 \title{cvSPDE}
 \usage{
-cvSPDE(data,SPDF,estimate.loc,mesh,allId.samples,uniqueAlleleIndex,sampleProb,method="group",spdeType="pc",sigma0=1,rangeDenom=5,range=c(NA,0.01),sigma=c(3,0.01))
+cvSPDE(data,SPDF,estimate.loc,mesh,allId.samples,uniqueAlleleIndex,sampleProb,allAlleleSequence,method="group",spdeType="pc",sigma0=1,rangeDenom=5,range=c(NA,0.01),sigma=c(3,0.01))
 }
 \description{
 Conduct leave one out cross validation for SPDE models.
@@ -15,6 +15,7 @@ Conduct leave one out cross validation for SPDE models.
 \item{allId.samples}{A numeric vector obtained by getIDsamples function for all locations.}
 \item{uniqueAlleleIndex}{A list of location-specific alleles obtained by the fifth value of processInput function.}
 \item{sampleProb}{A matrix of sample frequency. Can be obtained by makeSampleFreq function.}
+\item{allAlleleSequence}{A character vector of all allele sequences.}
 \item{method}{Directly passed to method argument in calSPDE function.}
 \item{spdeType}{Directly passed to spdeType argument in calcSPDE function.}
 \item{sigma0}{Directly passed to sigma0 argument in calcSPDE function.}

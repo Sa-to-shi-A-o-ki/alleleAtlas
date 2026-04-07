@@ -1272,8 +1272,17 @@ validateFrequency<-function(locIndex,id.samples,outData,sampleData,method="both"
   }
   return(result)
 }
+#add 0 for non-observed allele frequencies
+padProb<-function(probVec,alleleSequence,allAlleleSequence)
+{
+  fullProb<-numeric(length(allAlleleSequence))
+  matchIndex<-match(allAlleleSequence, alleleSequence)
+  valid<-which(!is.na(matchIndex))
+  fullProb[valid]<-probVec[matchIndex[valid]]
+  return(fullProb)
+}
 #conduct leave-one-out cross validation of CAR-model-based interpolation
-cvCAR<-function(data,randomModel,SPDF,data.loc,adjacency,allId.samples,uniqueAlleleIndex,sampleProb,method="group",prior="jeffreystdf")
+cvCAR<-function(data,randomModel,SPDF,adjacency,allId.samples,uniqueAlleleIndex,sampleProb,allAlleleSequence,method="group",prior="jeffreystdf")
 {
   loss<-vector("list",2)
   loss[[1]]<-vector("numeric",length(data))
@@ -1289,9 +1298,15 @@ cvCAR<-function(data,randomModel,SPDF,data.loc,adjacency,allId.samples,uniqueAll
     alternative<-temp[[4]]
     id.samples<-getIDsamples(data.loc,SPDF,TRUE)
     dataMatrix<-makeDataMatrix(newData,alternative,alleleSequence,id.samples,length(SPDF))
-    models<-calcCAR(alleleSequence,randomModel,graph,dataMatrix,method=method,prior=prior)
+    models<-calcCAR(alternative,randomModel,adjacency,dataMatrix,method=method,prior=prior)
     qt<-getMeanQt(models,dataMatrix)
-    loss[[1]][i]<-validateFrequency(i,allId.samples,qt[[1]],sampleProb,"HTAE")
+    #add 0 for non-observed allele frequencies
+    allFreq<- matrix(0,nrow=nrow(qt[[1]]),ncol=length(allAlleleSequence))
+    for(r in 1:nrow(qt[[1]]))
+    {
+      allFreq[r,]<-padProb(qt[[1]][r,],alleleSequence,allAlleleSequence)
+    }
+    loss[[1]][i]<-validateFrequency(i,allId.samples,allFreq,sampleProb,"HTAE")
     #skip if the location contains location-specific allele
     if(!is.null(uniqueAlleleIndex[[i]]))
     {
@@ -1303,7 +1318,7 @@ cvCAR<-function(data,randomModel,SPDF,data.loc,adjacency,allId.samples,uniqueAll
   return(loss)
 }
 #conduct leave-one-out cross validation of SPDE interpolation
-cvSPDE<-function(data,SPDF,estimate.loc,mesh,allId.samples,uniqueAlleleIndex,sampleProb,method="group",spdeType="pc",sigma0=1,rangeDenom=5,range=c(NA,0.01),sigma=c(3,0.01))
+cvSPDE<-function(data,SPDF,estimate.loc,mesh,allId.samples,uniqueAlleleIndex,sampleProb,allAlleleSequence,method="group",spdeType="pc",sigma0=1,rangeDenom=5,range=c(NA,0.01),sigma=c(3,0.01))
 {
   loss<-vector("list",2)
   loss[[1]]<-vector("numeric",length(data))
@@ -1321,7 +1336,13 @@ cvSPDE<-function(data,SPDF,estimate.loc,mesh,allId.samples,uniqueAlleleIndex,sam
     dataMatrix<-makeDataMatrix(newData,alternative,alleleSequence,id.samples,length(SPDF))
     models<-calcSPDE(alternative,dataMatrix,mesh=mesh,data.loc=estimate.loc,method=method,spdeType=spdeType,sigma0=sigma0,range=range,sigma=sigma)
     qt<-getMeanQtSPDE(models,mesh,estimate.loc)
-    loss[[1]][i]<-validateFrequency(i,allId.samples,qt[[1]],sampleProb,"HTAE")
+    #add 0 for non-observed allele frequencies
+    allFreq<- matrix(0,nrow=nrow(qt[[1]]),ncol=length(allAlleleSequence))
+    for(r in 1:nrow(qt[[1]]))
+    {
+      allFreq[r,]<-padProb(qt[[1]][r,],alleleSequence,allAlleleSequence)
+    }
+    loss[[1]][i]<-validateFrequency(i,allId.samples,allFreq,sampleProb,"HTAE")
     #skip if the location contains location-specific allele
     if(!is.null(uniqueAlleleIndex[[i]]))
     {

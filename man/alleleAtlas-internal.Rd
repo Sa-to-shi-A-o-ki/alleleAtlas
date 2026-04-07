@@ -8,6 +8,7 @@
 \alias{leaveOneOut}
 \alias{validateFrequency}
 \alias{resampleFreq}
+\alias{padProb}
 \title{Internal alleleAtlas Functions}
 \description{
  Internal alleleAtlas functions
