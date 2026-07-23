@@ -1,3 +1,10 @@
+ver.2.1.0
+Added a function to conduct leave-one-out cross validation of estimating mesh.
+Added negative log likelihood to cross-validation statistics.
+Rename halved total absolute error to total variation (TV) distance.
+Fixed description of depending packages.
+Renewed the vignette.
+
 ver.2.0.0
 Totally fixed models and functions.
 

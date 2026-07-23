@@ -2,7 +2,10 @@
 title: "alleleAtlas tutorial"
 author: "Satoshi Aoki"
 date: "`r Sys.Date()`"
-output: rmarkdown::html_vignette
+output: 
+  rmarkdown::html_vignette:
+    fig_width: 10
+    fig_height: 7
 vignette: >
   %\VignetteIndexEntry{alleleAtlas tutorial}
   %\VignetteEngine{knitr::rmarkdown}
@@ -17,7 +20,7 @@ knitr::opts_chunk$set(
 ```
 
 ## 1 Aim of this package, alleleAtlas
-The alleleAtlas is an R package for spatial interpolation of allele frequencies. This package uses Bayesian inference by R-INLA and can infer multiple allele frequencies at a time.
+The alleleAtlas is an R package for spatial interpolation of allele frequencies. This package uses Bayesian inference by R-INLA.
 
 ## 2 Installation
 This package is not on CRAN because the depending package, R-INLA, is not on CRAN. So, you first have to get the method to install packages from GitHub. One way to do it is using devtools package. The following command installs devtools and alleleAtlas.
@@ -32,6 +35,7 @@ devtools::install_github("alleleAtlas/Sa-to-shi-A-o-ki", upgrade="never")
 The other depending packages are also necessary. The depending packages are:
 spatstat, s2, gridExtra, leaflet,leaflet.minicharts, parzer, fmesher, sf,spdep
 They are all on CRAN. Therefore, they can be installed using install.packages function.
+
 ## 3 How to use
 First, please load the package by the following command:
 
@@ -41,7 +45,7 @@ library(alleleAtlas)
 ``` {r, results="hide", warning=FALSE, message=FALSE,echo=FALSE}
 #import depending libraries
 library(INLA)
-library(spatstat)
+library(spatstat.geom)
 library(s2)
 library(sp)
 library(gridExtra)
@@ -54,7 +58,7 @@ library(fmesher)
 library(sn)
 ```
 
-### 3.1 Import and prepare csv file
+### 3.1 Data preparation & Import
 We need data of the sampling locations and alleles for the analysis. The next command imports example data included in this package.
 ```{r}
 Edata<-readLines(system.file("extdata","Faguslocationdata.csv",package="alleleAtlas"),encoding="UTF-8")
@@ -143,8 +147,6 @@ EfreqCAR<-getMeanQt(Emodels,EdataMatrix)
 plotAllFreq(ESPDF,EfreqCAR[[2]],size=24)
 ```
 
-Because the result changes depending on the meshes and used models, please try some combinations of them. Typically, the following random model can be used: "besag", "besag2", "besagproper" and "besagproper2".
-
 ### 3.3 Test continuous inference
 
 In continuous inference, the package uses a user-made shape file which defines the study area. This file is not divided into meshes like the previous file. You can prepare this file by dissolving the meshes into a single polygon.
@@ -172,8 +174,256 @@ Emodels<-calcSPDE(Ealternative,EdataMatrix,mesh=mesh,data.loc=estimate.loc)
 prob<-getMeanQtSPDE(Emodels,mesh,estimate.loc)
 plotAllFreq(ESPDF,prob[[2]],dimx=15,dimy=15,size=24)
 ```
-## 4 The other functions
-This package also has functions to conduct cross validation, calculate credible intervals, nucleotide diversity and expected heterozygosity from the interpolated result and plot data on a map. The next codes plot the frequency of the first allele type, its 95% credible interval and expected heterozygosity from the interpolation result. These can be plotted for the discrete results by changing mesh to ESPDF in this example codes.
+## 4 Cross validation
+The result of interpolation changes depending on the meshes, models and posterior statistics (posterior mean or median). Then, how can we judge which is the best estimation? One way to do it is to use cross validation.
+
+This package has functions to conduct leave-one-out cross validation (LOOCV), and the functions provide three statistics: total variation distance (TV), logloss and negative log likelihood (NLL). They slightly differ, but smaller value is better for all of them. Logloss and NLL cannot be calculated when the leave-one-out location includes location-specific allele. On the other hand, NLL is theoretically concordant with model selection. Therefore, I personally recommend to use NLL for model selection within a method and to use TV for comparison among different methods, posterior mean and median.
+
+Following code conducts LOOCV for the discrete inference using two models: besag and besag2. The other two models, besagproper and besagproper2, also can be the candidates, but they are omitted here. Please note that LOOCV takes much longer time for calculation than one-time interpolation.
+```{r}
+Edata.count<-makeSampleAlleleCount(EdataMatrix,ESPDF)
+randomModels<-c("besag","besag2")
+
+NLLQtCAR<-vector("numeric",length(randomModels))
+NLLMnCAR<-vector("numeric",length(randomModels))
+lossQtCAR<-vector("numeric",length(randomModels))
+lossMnCAR<-vector("numeric",length(randomModels))
+TVQtCAR<-vector("numeric",length(randomModels))
+TVMnCAR<-vector("numeric",length(randomModels))
+
+for(j in 1:length(randomModels))
+{
+	print(randomModels[j])
+	locQtNLL<-rep(NA,length(ESPDF))
+	locMnNLL<-rep(NA,length(ESPDF))
+	locQtLoss<-rep(NA,length(ESPDF))
+	locMnLoss<-rep(NA,length(ESPDF))
+	locQtTV<-rep(NA,length(ESPDF))
+	locMnTV<-rep(NA,length(ESPDF))
+	for(i in 1:length(ESPDF))
+	{
+		print(paste0("mesh ",i,"/",length(ESPDF)))
+		newData<-leaveOneOutMesh(i,Edata,Eid.samples)
+		if(length(newData)==length(data))
+		{
+			next
+		}
+		temp<-processInput(newData)
+		data.loc<-temp[[1]]
+		alleleCount<-temp[[2]]
+		alleleSequence<-temp[[3]]
+		alternative<-temp[[4]]
+		id.samples<-getIDsamples(data.loc,ESPDF,TRUE)
+		dataMatrix<-makeDataMatrix(newData,alternative,alleleSequence,id.samples,length(ESPDF))
+		models<-calcCAR(alleleSequence,randomModels[j],Egraph,dataMatrix)
+		qt<-getMeanQt(models,dataMatrix)
+		#add 0 for non-observed allele frequencies
+		allFreqMn<-matrix(0,nrow=nrow(qt[[1]]),ncol=length(EalleleSequence))
+		allFreqQt<-matrix(0,nrow=nrow(qt[[2]]),ncol=length(EalleleSequence))
+		for(r in 1:nrow(qt[[1]]))
+		{
+			allFreqMn[r,]<-padProb(qt[[1]][r,],alleleSequence,EalleleSequence)
+			allFreqQt[r,]<-padProb(qt[[2]][r,],alleleSequence,EalleleSequence)
+			allFreqQt[r,]<-allFreqQt[r,]/sum(allFreqQt[r,])
+		}
+		locQtNLL[i]<-validateFrequency(i,allFreqQt,Edata.count,"logloss")
+		locMnNLL[i]<-validateFrequency(i,allFreqMn,Edata.count,"logloss")
+		locQtLoss[i]<-validateFrequency(i,allFreqQt,Edata.prob,"logloss")
+		locMnLoss[i]<-validateFrequency(i,allFreqMn,Edata.prob,"logloss")
+		locQtTV[i]<-validateFrequency(i,allFreqQt,Edata.prob,"TV")
+		locMnTV[i]<-validateFrequency(i,allFreqMn,Edata.prob,"TV")
+	}
+	NLLQtCAR[j]<-mean(locQtNLL,na.rm=TRUE)
+	NLLMnCAR[j]<-mean(locMnNLL,na.rm=TRUE)
+	lossQtCAR[j]<-mean(locQtLoss,na.rm=TRUE)
+	lossMnCAR[j]<-mean(locMnLoss,na.rm=TRUE)
+	TVQtCAR[j]<-mean(locQtTV,na.rm=TRUE)
+	TVMnCAR[j]<-mean(locMnTV,na.rm=TRUE)
+}
+#meanLossCAR
+bestModelQt<-randomModels[grep(min(NLLQtCAR),NLLQtCAR)]
+bestModelMn<-randomModels[grep(min(NLLMnCAR),NLLMnCAR)]
+
+qtModel<-calcCAR(Ealternative,bestModelQt,Egraph,EdataMatrix)
+Eqt<-getMeanQt(qtModel,EdataMatrix)
+mnModel<-calcCAR(Ealternative,bestModelMn,Egraph,EdataMatrix)
+Emn<-getMeanQt(mnModel,EdataMatrix)
+
+CARresultQt<-Eqt[[2]]
+CARresultMn<-Emn[[1]]
+
+#make CARresultQt summed up to 1
+for(j in 1:length(ESPDF))
+{
+	locFreqSum<-sum(CARresultQt[j,])
+	CARresultQt[j,]<-CARresultQt[j,]/locFreqSum
+}
+plotAllFreq(ESPDF,CARresultQt,size=24)
+plotAllFreq(ESPDF,CARresultMn,size=24)
+
+bestNLLQtCAR<-NLLQtCAR[grep(min(lossQtCAR),lossQtCAR)]
+bestNLLMnCAR<-NLLMnCAR[grep(min(lossMnCAR),lossMnCAR)]
+bestLossQtCAR<-lossQtCAR[grep(min(lossQtCAR),lossQtCAR)]
+bestLossMnCAR<-lossMnCAR[grep(min(lossMnCAR),lossMnCAR)]
+bestTVQtCAR<-TVQtCAR[grep(min(lossQtCAR),lossQtCAR)]
+bestTVMnCAR<-TVMnCAR[grep(min(lossMnCAR),lossMnCAR)]
+```
+
+Likewise, following codes conduct LOOCV for the continuous method and inverse distance weighting which is conducted by phylin package.
+
+```{r, eval=FALSE}
+NLLQtSPDE<-0
+NLLMnSPDE<-0
+lossQtSPDE<-0
+lossMnSPDE<-0
+TVQtSPDE<-0
+TVMnSPDE<-0
+
+NLLQtSPDEpc<-0
+NLLMnSPDEpc<-0
+lossQtSPDEpc<-0
+lossMnSPDEpc<-0
+TVQtSPDEpc<-0
+TVMnSPDEpc<-0
+
+locQtNLL<-rep(NA,length(ESPDF))
+locMnNLL<-rep(NA,length(ESPDF))
+locQtLoss<-rep(NA,length(ESPDF))
+locMnLoss<-rep(NA,length(ESPDF))
+locQtTV<-rep(NA,length(ESPDF))
+locMnTV<-rep(NA,length(ESPDF))
+locQtNLLpc<-rep(NA,length(ESPDF))
+locMnNLLpc<-rep(NA,length(ESPDF))
+locQtLosspc<-rep(NA,length(ESPDF))
+locMnLosspc<-rep(NA,length(ESPDF))
+locQtTVpc<-rep(NA,length(ESPDF))
+locMnTVpc<-rep(NA,length(ESPDF))
+
+for(i in 1:length(ESPDF))
+{
+	print(paste0("mesh ",i,"/",length(ESPDF)))
+	newData<-leaveOneOutMesh(i,Edata,Eid.samples)
+	if(length(newData)==length(data))
+	{
+		next
+	}
+	temp<-processInput(newData)
+	data.loc<-temp[[1]]
+	alleleCount<-temp[[2]]
+	alleleSequence<-temp[[3]]
+	alternative<-temp[[4]]
+	id.samples<-getIDsamples(data.loc,ESPDF,TRUE)
+	dataMatrix<-makeDataMatrix(newData,alternative,alleleSequence,id.samples,length(ESPDF))
+	model<-calcSPDE(alternative,dataMatrix,mesh=mesh,data.loc=estimate.loc,spdeType="matern")
+	modelpc<-calcSPDE(alternative,dataMatrix,mesh=mesh,data.loc=estimate.loc,spdeType="pc")
+
+	qt<-getMeanQtSPDE(model,mesh,estimate.loc)
+	qtpc<-getMeanQtSPDE(modelpc,mesh,estimate.loc)
+	#add 0 for non-observed allele frequencies
+	allFreqMn<-matrix(0,nrow=nrow(qt[[1]]),ncol=length(EalleleSequence))
+	allFreqQt<-matrix(0,nrow=nrow(qt[[2]]),ncol=length(EalleleSequence))
+	allFreqMnpc<-matrix(0,nrow=nrow(qtpc[[1]]),ncol=length(EalleleSequence))
+	allFreqQtpc<-matrix(0,nrow=nrow(qtpc[[2]]),ncol=length(EalleleSequence))
+	for(r in 1:nrow(qt[[1]]))
+	{
+		allFreqMn[r,]<-padProb(qt[[1]][r,],alleleSequence,EalleleSequence)
+		allFreqQt[r,]<-padProb(qt[[2]][r,],alleleSequence,EalleleSequence)
+		allFreqMnpc[r,]<-padProb(qtpc[[1]][r,],alleleSequence,EalleleSequence)
+		allFreqQtpc[r,]<-padProb(qtpc[[2]][r,],alleleSequence,EalleleSequence)
+		allFreqQt[r,]<-allFreqQt[r,]/sum(allFreqQt[r,])
+		allFreqQtpc[r,]<-allFreqQtpc[r,]/sum(allFreqQtpc[r,])
+	}
+	locQtNLL[i]<-validateFrequency(i,allFreqQt,Edata.count,"logloss")
+	locMnNLL[i]<-validateFrequency(i,allFreqMn,Edata.count,"logloss")
+	locQtLoss[i]<-validateFrequency(i,allFreqQt,Edata.prob,"logloss")
+	locMnLoss[i]<-validateFrequency(i,allFreqMn,Edata.prob,"logloss")
+	locQtTV[i]<-validateFrequency(i,allFreqQt,Edata.prob,"TV")
+	locMnTV[i]<-validateFrequency(i,allFreqMn,Edata.prob,"TV")
+	locQtNLLpc[i]<-validateFrequency(i,allFreqQtpc,Edata.count,"logloss")
+	locMnNLLpc[i]<-validateFrequency(i,allFreqMnpc,Edata.count,"logloss")
+	locQtLosspc[i]<-validateFrequency(i,allFreqQtpc,Edata.prob,"logloss")
+	locMnLosspc[i]<-validateFrequency(i,allFreqMnpc,Edata.prob,"logloss")
+	locQtTVpc[i]<-validateFrequency(i,allFreqQtpc,Edata.prob,"TV")
+	locMnTVpc[i]<-validateFrequency(i,allFreqMnpc,Edata.prob,"TV")
+}
+NLLQtSPDE<-mean(locQtNLL,na.rm=TRUE)
+NLLMnSPDE<-mean(locMnNLL,na.rm=TRUE)
+lossQtSPDE<-mean(locQtLoss,na.rm=TRUE)
+lossMnSPDE<-mean(locMnLoss,na.rm=TRUE)
+TVQtSPDE<-mean(locQtTV,na.rm=TRUE)
+TVMnSPDE<-mean(locMnTV,na.rm=TRUE)
+NLLQtSPDEpc<-mean(locQtNLLpc,na.rm=TRUE)
+NLLMnSPDEpc<-mean(locMnNLLpc,na.rm=TRUE)
+lossQtSPDEpc<-mean(locQtLosspc,na.rm=TRUE)
+lossMnSPDEpc<-mean(locMnLosspc,na.rm=TRUE)
+TVQtSPDEpc<-mean(locQtTVpc,na.rm=TRUE)
+TVMnSPDEpc<-mean(locMnTVpc,na.rm=TRUE)
+```
+
+```{r, eval=FALSE}
+powers<-c(1,2,3,4,5,6,7,8,9,10)
+NLLIDW<-vector("numeric",length(powers))
+lossIDW<-vector("numeric",length(powers))
+TVIDW<-vector("numeric",length(powers))
+for(j in 1:length(powers))
+{
+print(paste0("power: ",powers[j]))
+	locNLL<-rep(NA,length(ESPDF))
+	locLoss<-rep(NA,length(ESPDF))
+	locTV<-rep(NA,length(ESPDF))
+	for(i in 1:length(ESPDF))
+	{
+		newData<-leaveOneOutMesh(i,Edata,Eid.samples)
+		if(length(newData)==length(data))
+		{
+			next
+		}
+		temp<-processInput(newData)
+		data.loc<-temp[[1]]
+		alleleCount<-temp[[2]]
+		alleleSequence<-temp[[3]]
+		alternative<-temp[[4]]
+		alleleSPDF<-getAlleleSPDF(newData)
+		IDWresult<-matrix(0,ncol=alternative,nrow=length(grid[,1]))
+		for(k in 1:alternative)
+		{
+			IDWresult[,k]<-eval(parse(text=paste0("phylin::idw(alleleSPDF$X",k,",p=powers[",j,"],data.loc,grid,N=45)[,1]")))	
+		}
+		#add 0 for non-observed allele frequencies
+		allFreq<-matrix(0,nrow=nrow(IDWresult),ncol=length(EalleleSequence))
+		for(r in 1:nrow(IDWresult))
+		{
+			allFreq[r,]<-padProb(IDWresult[r,],alleleSequence,EalleleSequence)
+		}
+		locNLL[i]<-validateFrequency(i,allFreq,Edata.count,"logloss")
+		locLoss[i]<-validateFrequency(i,allFreq,Edata.prob,"logloss")
+		locTV[i]<-validateFrequency(i,allFreq,Edata.prob,"TV")		
+	}
+	NLLIDW[j]<-mean(locNLL,na.rm=TRUE)
+	lossIDW[j]<-mean(locLoss,na.rm=TRUE)
+	TVIDW[j]<-mean(locTV,na.rm=TRUE)
+}
+
+#power which gives minimum logloss
+bestPower<-powers[grep(min(NLLIDW),NLLIDW)]
+
+EalleleSPDF<-getPopulationAlleleSPDF(Edata,Edata)
+IDWresult<-matrix(0,ncol=Ealternative,nrow=length(grid[,1]))
+for(i in 1:Ealternative)
+{
+	IDWresult[,i]<-eval(parse(text=paste0("phylin::idw(EalleleSPDF$X",i,",p=bestPower,Edata.loc,grid,N=45)[,1]")))	
+}
+#show result
+plotAllFreq(ESPDF,IDWresult,size=24)
+
+#obtain logloss for the best parameter
+bestNLLIDW<-NLLIDW[bestPower]
+bestLossIDW<-lossIDW[bestPower]
+bestTVIDW<-TVIDW[bestPower]
+```
+
+## 5 The other functions
+This package also has functions to calculate credible intervals, nucleotide diversity and expected heterozygosity from the interpolated result and plot data on a map. The next codes plot the frequency of the first allele type, its 95% credible interval and expected heterozygosity from the interpolation result. These can be plotted for the discrete results by changing mesh to ESPDF in this example codes.
 ```{r}
 plotDatum(ESPDF,EfreqCAR[[1]][,1],"allele1")
 plotDatum(ESPDF,EfreqCAR[[2]][,1],"allele1LowerCI")

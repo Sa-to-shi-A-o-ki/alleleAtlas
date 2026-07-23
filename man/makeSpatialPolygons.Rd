@@ -2,7 +2,9 @@
 \alias{makeSpatialPolygons}
 \title{makeSpatialPolygons}
 \usage{
-makeSpatialPolygons(autoWindow,lat,lon,minlon=-180,maxlon=180,minlat=-90,maxlat=90,data.loc=NULL,northPole=NULL,southPole=NULL,loop=NULL,forceMaxEast=NULL,margin=0.001)
+makeSpatialPolygons(autoWindow,lat,lon,
+minlon=-180,maxlon=180,minlat=-90,maxlat=90,
+data.loc=NULL,northPole=NULL,southPole=NULL,loop=NULL,forceMaxEast=NULL,margin=0.001)
 }
 \description{
 Make a spatial polygons data frame of rectangular meshes.

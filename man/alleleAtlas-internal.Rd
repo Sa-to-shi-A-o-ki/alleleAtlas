@@ -3,12 +3,13 @@
 \alias{makeMinWindow}
 \alias{interpreteBase}
 \alias{seq.dist}
-\alias{calcHTAE}
+\alias{calcTV}
 \alias{calcLogLoss}
-\alias{leaveOneOut}
+\alias{leaveOneOutMesh}
 \alias{validateFrequency}
 \alias{resampleFreq}
 \alias{padProb}
+\alias{makeSampleAlleleCount}
 \title{Internal alleleAtlas Functions}
 \description{
  Internal alleleAtlas functions

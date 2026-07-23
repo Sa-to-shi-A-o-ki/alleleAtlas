@@ -2,7 +2,8 @@
 \alias{plotAllFreq}
 \title{plotAllFreq}
 \usage{
-plotAllFreq(polygon,data,groupList=NULL,dimx=10,dimy=10,type="pie",size=30,tile="Esri.WorldGrayCanvas",color=NULL)
+plotAllFreq(polygon,data,groupList=NULL,dimx=10,dimy=10,
+type="pie",size=30,tile="Esri.WorldGrayCanvas",color=NULL)
 }
 \description{
 Plot all frequencies on a map.

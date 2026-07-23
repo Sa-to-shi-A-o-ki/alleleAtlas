@@ -2,7 +2,8 @@
 \alias{calcCAR}
 \title{calcCAR}
 \usage{
-calcCAR(alternative,randomModel,adjacency,dataMatrix,method="group",prior="jeffreystdf",verbose=FALSE)
+calcCAR(alternative,randomModel,adjacency,
+dataMatrix,method="group",prior="jeffreystdf",verbose=FALSE)
 }
 \description{
 Calculate conditional autoregression model to interpolate allele frequencies.

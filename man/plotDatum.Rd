@@ -2,7 +2,8 @@
 \alias{plotDatum}
 \title{plotDatum}
 \usage{
-plotDatum(polygon,data,title,markerLoc=NULL,tile="Esri.WorldGrayCanvas",col1="red",col2="yellow")
+plotDatum(polygon,data,title,markerLoc=NULL,
+tile="Esri.WorldGrayCanvas",col1="red",col2="yellow")
 }
 \description{
 Plot an allele frequency or the other statistic as a heat map.

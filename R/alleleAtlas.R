@@ -638,24 +638,7 @@ processInput<-function(data)
       isLocUniqueAllele[j]<-TRUE
     }
   }
-  #find location-specific (unique) allele in each location
-  uniqueAlleleIndex<-vector("list",length(data))
-  for(j in 1:length(alleleSequence))
-  {
-    if(!isLocUniqueAllele[j])
-    {
-      next
-    }
-    for(i in 1:length(data))
-    {
-      index1<- match(alleleSequence[j],locationAlleleList[[i]])
-      if(!is.na(index1))
-      {
-        uniqueAlleleIndex[[i]]<-c(uniqueAlleleIndex[[i]],j)
-      }
-    }
-  }
-  return(list(data.loc,alleleCount,alleleSequence,alternative,uniqueAlleleIndex))
+  return(list(data.loc,alleleCount,alleleSequence,alternative))
 }
 
 sf2SPDF<-function(shape)
@@ -1057,7 +1040,7 @@ plotAllFreq<-function(polygon,data,groupList=NULL,dimx=10,dimy=10,type="pie",siz
   }
   return(lf)
 }
-
+#calculate allele frequency of all samples (not interpolated one)
 makeSampleFreq<-function(dataMatrix,SPDF)
 {
   locSize<-length(SPDF)
@@ -1092,7 +1075,41 @@ makeSampleFreq<-function(dataMatrix,SPDF)
   }
   return(prob)
 }
-
+#calculate allele count of allele types per estimating mesh for likelihood calculation
+makeSampleAlleleCount<-function(dataMatrix,SPDF)
+{
+  locSize<-length(SPDF)
+  alleleSize<-max(dataMatrix$alt)
+  prob<-matrix(0,locSize,alleleSize)
+  #count alleles for each location
+  for(i in 1:nrow(dataMatrix))
+  {
+    if(!is.na(dataMatrix[i,1]))
+    {
+      if(dataMatrix[i,1]!=0)
+      {
+        Y<-dataMatrix[i,1]
+        alleleNo<-dataMatrix$alt[i]
+        locNo<-dataMatrix$allele[i]
+        prob[locNo,alleleNo]<-prob[locNo,alleleNo]+Y
+      }
+    }
+  }
+  #convert the count into probability
+  for(i in 1:locSize)
+  {
+    locSum<-sum(prob[i,])
+    if(locSum!=0)
+    {
+      prob[i,]<-prob[i,]
+    }
+    else
+    {
+      prob[i,]<-NaN
+    }
+  }
+  return(prob)
+}
 meshProj2Rectangles<-function(meshProjector)
 {
   data.x<-meshProjector$x
@@ -1206,8 +1223,8 @@ calcSPDE<-function(alternative,dataMatrix,mesh,data.loc,verbose=FALSE,method="gr
   return(model)
 }
 
-#calculate HTAE: Halved Total Absolute Error of allele frequencies. HTAE ranges [0,1).
-calcHTAE<-function(estimatedValue,trueValue)
+#calculate TV: Halved Total Absolute Error of allele frequencies. TV ranges [0,1).
+calcTV<-function(estimatedValue,trueValue)
 {
   result<-0
   if(length(estimatedValue)!=length(trueValue))
@@ -1221,8 +1238,8 @@ calcHTAE<-function(estimatedValue,trueValue)
   }
   return(result/2)
 }
-#calculate log loss
-calcLogLoss<-function(estimatedFreq,trueCount)
+#calculate log loss. trueCount can be a count of alleles or allele frequency
+calcLogLoss<-function(estimatedFreq,trueCount,infTreat=NA)
 {
   result<-0
   if(length(estimatedFreq)!=length(trueCount))
@@ -1232,38 +1249,44 @@ calcLogLoss<-function(estimatedFreq,trueCount)
   }
   for(i in 1:length(estimatedFreq))
   {
-    if(estimatedFreq[i]==0)
+    if(log(estimatedFreq[i])==-Inf)
     {
-      next
+      result<-result-trueCount[i]*infTreat
     }
-    result<-result-trueCount[i]*log(estimatedFreq[i])
+    else
+    {
+      result<-result-trueCount[i]*log(estimatedFreq[i])
+    }
   }
   return(result)
 }
-#make data where one location is omitted for cross validation
-leaveOneOut<-function(outIndex,data)
+#make data where one mesh is omitted for cross validation
+leaveOneOutMesh<-function(outMeshIndex,data,id.samples)
 {
-  return(data[-1*outIndex])
+  locIndex<-which(id.samples==outMeshIndex)
+  if(length(locIndex)==0)
+  {
+    return(data)
+  }
+  if(length(data[-1*locIndex])==0)
+  {
+    print("Warning: all sampling locations are in a single estimating mesh.")
+  }
+  return(data[-1*locIndex])
 }
 #compare the frequency estimated by leave-one-out data and the sample frequency for cross validation
-validateFrequency<-function(locIndex,id.samples,outData,sampleData,method="both")
+validateFrequency<-function(meshIndex,outData,sampleData,method,infTreat=NA)
 {
-  meshID<-id.samples[locIndex]
-  estimated<-outData[meshID,]
-  sample<-sampleData[meshID,]
-  if(method=="both")
+  estimated<-outData[meshIndex,]
+  sample<-sampleData[meshIndex,]
+
+  if(method=="TV")
   {
-    result<-vector("list",2)
-    result[[1]]<-calcLogLoss(estimated,sample)
-    result[[2]]<-calcHTAE(estimated,sample)
-  }
-  else if(method=="HTAE")
-  {
-    result<-calcHTAE(estimated,sample)
+    result<-calcTV(estimated,sample)
   }
   else if(method=="logloss")
   {
-    result<-calcLogLoss(estimated,sample)
+    result<-calcLogLoss(estimated,sample,infTreat)
   }
   else
   {
@@ -1282,15 +1305,23 @@ padProb<-function(probVec,alleleSequence,allAlleleSequence)
   return(fullProb)
 }
 #conduct leave-one-out cross validation of CAR-model-based interpolation
-cvCAR<-function(data,randomModel,SPDF,adjacency,allId.samples,uniqueAlleleIndex,sampleProb,allAlleleSequence,method="group",prior="jeffreystdf")
+cvCAR<-function(data,randomModel,SPDF,adjacency,allId.samples,allDataMatrix,allAlleleSequence,method="group",prior="jeffreystdf",infTreat=NA)
 {
   loss<-vector("list",2)
-  loss[[1]]<-vector("numeric",length(data))
-  loss[[2]]<-vector("numeric",length(data))
-  for(i in 1:length(data))
+  loss[[1]]<-vector("numeric",length(data))#TV
+  loss[[2]]<-vector("numeric",length(data))#logloss
+  loss[[3]]<-vector("numeric",length(data))#negative log likelihood
+  sampleProb<-makeSampleFreq(allDataMatrix,SPDF)
+  sampleCount<-makeSampleAlleleCount(allDataMatrix,SPDF)
+  for(i in 1:length(SPDF))
   {
-    print(paste0("location ",i,"/",length(data)))
-    newData<-leaveOneOut(i,data)
+    print(paste0("mesh ",i,"/",length(SPDF)))
+    newData<-leaveOneOutMesh(i,data,allId.samples)
+    #if the checking mesh does not contain sampling location, skip loop
+    if(length(newData)==length(data))
+    {
+      next
+    }
     temp<-processInput(newData)
     data.loc<-temp[[1]]
     alleleCount<-temp[[2]]
@@ -1306,27 +1337,30 @@ cvCAR<-function(data,randomModel,SPDF,adjacency,allId.samples,uniqueAlleleIndex,
     {
       allFreq[r,]<-padProb(qt[[1]][r,],alleleSequence,allAlleleSequence)
     }
-    loss[[1]][i]<-validateFrequency(i,allId.samples,allFreq,sampleProb,"HTAE")
-    #skip if the location contains location-specific allele
-    if(!is.null(uniqueAlleleIndex[[i]]))
-    {
-      loss[[2]][i]<-NA
-      next
-    }
-    loss[[2]][i]<-validateFrequency(i,allId.samples,qt[[1]],sampleProb,"logloss")
+    loss[[1]][i]<-validateFrequency(i,allFreq,sampleProb,"TV")
+    loss[[2]][i]<-validateFrequency(i,qt[[1]],sampleProb,"logloss",infTreat)
+    loss[[3]][i]<-validateFrequency(i,qt[[1]],sampleCount,"logloss",infTreat)
   }
   return(loss)
 }
 #conduct leave-one-out cross validation of SPDE interpolation
-cvSPDE<-function(data,SPDF,estimate.loc,mesh,allId.samples,uniqueAlleleIndex,sampleProb,allAlleleSequence,method="group",spdeType="pc",sigma0=1,rangeDenom=5,range=c(NA,0.01),sigma=c(3,0.01))
+cvSPDE<-function(data,SPDF,estimate.loc,mesh,allId.samples,allDataMatrix,allAlleleSequence,method="group",spdeType="pc",sigma0=1,rangeDenom=5,range=c(NA,0.01),sigma=c(3,0.01),infTreat=NA)
 {
   loss<-vector("list",2)
-  loss[[1]]<-vector("numeric",length(data))
-  loss[[2]]<-vector("numeric",length(data))
-  for(i in 1:length(data))
+  loss[[1]]<-vector("numeric",length(data))#TV
+  loss[[2]]<-vector("numeric",length(data))#logloss
+  loss[[3]]<-vector("numeric",length(data))#negative log likelihood
+  sampleProb<-makeSampleFreq(allDataMatrix,SPDF)
+  sampleCount<-makeSampleAlleleCount(allDataMatrix,SPDF)
+  for(i in 1:length(SPDF))
   {
-    print(paste0("location ",i,"/",length(data)))
-    newData<-leaveOneOut(i,data)
+    print(paste0("mesh ",i,"/",length(SPDF)))
+    newData<-leaveOneOutMesh(i,data,allId.samples)
+    #if the checking mesh does not contain sampling location, skip loop
+    if(length(newData)==length(data))
+    {
+      next
+    }
     temp<-processInput(newData)
     data.loc<-temp[[1]]
     alleleCount<-temp[[2]]
@@ -1342,14 +1376,9 @@ cvSPDE<-function(data,SPDF,estimate.loc,mesh,allId.samples,uniqueAlleleIndex,sam
     {
       allFreq[r,]<-padProb(qt[[1]][r,],alleleSequence,allAlleleSequence)
     }
-    loss[[1]][i]<-validateFrequency(i,allId.samples,allFreq,sampleProb,"HTAE")
-    #skip if the location contains location-specific allele
-    if(!is.null(uniqueAlleleIndex[[i]]))
-    {
-      loss[[2]][i]<-NA
-      next
-    }
-    loss[[2]][i]<-validateFrequency(i,allId.samples,qt[[1]],sampleProb,"logloss")
+    loss[[1]][i]<-validateFrequency(i,allFreq,sampleProb,"TV")
+    loss[[2]][i]<-validateFrequency(i,qt[[1]],sampleProb,"logloss",infTreat)
+    loss[[3]][i]<-validateFrequency(i,qt[[1]],sampleCount,"logloss",infTreat)
   }
   return(loss)
 }

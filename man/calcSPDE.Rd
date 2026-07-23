@@ -2,7 +2,9 @@
 \alias{calcSPDE}
 \title{calcSPDE}
 \usage{
-calcSPDE(alternative,dataMatrix,mesh,data.loc,verbose=FALSE,method="group",spdeType="pc",sigma0=1,rangeDenom=5,range=c(NA,0.01),sigma=c(3,0.01))
+calcSPDE(alternative,dataMatrix,mesh,data.loc,
+verbose=FALSE,method="group",spdeType="pc",
+sigma0=1,rangeDenom=5,range=c(NA,0.01),sigma=c(3,0.01))
 }
 \description{
 Calculate SPDE model to interpolate allele frequencies.
